@@ -1,0 +1,53 @@
+/* DaddyVault semantic tokens. The existing application supports a dark theme. */
+:root {
+  color-scheme: dark;
+  --brand-navy: #0f172a;
+  --brand-emerald: #10b981;
+  --brand-gold: #f59e0b;
+  --brand-slate: #334155;
+  --brand-white: #f8fafc;
+  --brand-border-light: #e2e8f0;
+  --brand-muted-light: #64748b;
+  --bg: #0b1220;
+  --surface: #0f1b2d;
+  --surface-high: #17253a;
+  --surface-hover: #1d2e45;
+  --surface-inset: #0b1525;
+  --border: #253449;
+  --border-strong: #425570;
+  --text: #f1f5f9;
+  --text-secondary: #c0cddd;
+  --muted: #9cacc1;
+  --positive: #34d399;
+  --negative: #fda4af;
+  --warning: #fbbf24;
+  --action: #10b981;
+  --action-hover: #34d399;
+  --action-text: #052e25;
+  --focus: #6ee7b7;
+  --chart-inactive: #40516a;
+  --chart-track: #253449;
+  --chart-emerald: #34d399;
+  --chart-teal: #5baea8;
+  --chart-blue: #8aaed6;
+  --chart-slate: #94a3b8;
+  --chart-gold: #d8b36c;
+  --chart-pale: #bbc9dc;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-heading: 'Manrope', 'Inter', 'Segoe UI', sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 8px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --shadow-card: 0 4px 18px rgb(0 0 0 / 8%);
+  --shadow-dialog: 0 24px 80px rgb(0 0 0 / 40%);
+  /* Existing presentation aliases retain their semantics. */
+  --green: var(--positive);
+  --coral: var(--negative);
+}
