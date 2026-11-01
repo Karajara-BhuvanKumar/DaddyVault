@@ -35,6 +35,7 @@
  function unlock(user){
   if(identity&&identity!==user.id){location.reload();return;}
   identity=user.id;get('auth-form').reset();get('auth-dialog').close();get('sign-out').hidden=false;
+  cleanURL();
   pending=null;const resolve=resolvePending;resolvePending=null;resolve?.();
  }
  function prompt(next='login'){
@@ -80,7 +81,7 @@
    else prompt('reset');
    return pending;
   }
-  if(!data.session)await prompt();else{identity=data.session.user.id;get('sign-out').hidden=false;}
+  if(!data.session)await prompt();else{identity=data.session.user.id;get('sign-out').hidden=false;if(fragment.get('access_token')||params.get('access_token'))cleanURL();}
  }
  async function getToken(){
   if(recovery)await prompt('reset');

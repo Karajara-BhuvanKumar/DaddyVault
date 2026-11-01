@@ -47,7 +47,12 @@ function entryForm(id,type='expense',linked={}){
   const accounts=existing?state.accounts.map(a=>[a.id,a.name]):activeAccounts(!['income','expense'].includes(type));
   body+=select('accountId',['contribution','withdrawal'].includes(type)?'Allocation account':'Account',accounts,t.accountId);
   if(['income','expense'].includes(type))body+=select('category','Category',pairs(state.categories[type]),t.category||state.categories[type][0]);
-  if(['transfer','repayment'].includes(type))body+=select('toAccountId','Destination account',state.accounts.filter(a=>!a.archived&&(type==='repayment'?a.type==='Credit Card':a.type!=='Credit Card')).map(a=>[a.id,a.name]),t.toAccountId)+'<p class="form-note">Moves money between accounts. Does not count as income or expense.</p>';
+  if(['transfer','repayment'].includes(type)){
+    const destAccounts=state.accounts.filter(a=>!a.archived&&(type==='repayment'?a.type==='Credit Card':a.type!=='Credit Card'));
+    body+=select('toAccountId','Destination account',destAccounts.map(a=>[a.id,a.name]),t.toAccountId);
+    if(type==='repayment'&&!destAccounts.length)body+='<p class="form-note coral">No active credit card accounts found. Add a credit card account first.</p>';
+    else body+='<p class="form-note">Moves money between accounts. Does not count as income or expense.</p>';
+  }
   if(['buy','sell'].includes(type))body+=select('holdingId','Investment',state.holdings.map(h=>[h.id,h.name]),t.holdingId)+field('units','Units',t.units||'','number','min="0.00000001" max="10000000000" step="any" required')+'<p class="form-note">Enter total '+(type==='buy'?'purchase cost including fees':'sale proceeds after fees')+'. Cost basis uses weighted average cost.</p>';
   if(['contribution','withdrawal'].includes(type))body+=select('goalId','Goal',state.goals.filter(g=>!g.archived||g.id===t.goalId).map(g=>[g.id,g.name]),t.goalId)+'<p class="form-note">This changes the allocation of existing cash. It does not move money or count as income/expense.</p>';
   body+=field('paymentMethod','Payment method',t.paymentMethod,'text','required maxlength="60" list="payment-methods"')+'<datalist id="payment-methods"><option>UPI</option><option>Cash</option><option>Card</option><option>Bank transfer</option></datalist>'+notesField(t.notes);
