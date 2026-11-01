@@ -5,7 +5,10 @@ const path=require('node:path');
 const {execFileSync}=require('node:child_process');
 const root=path.resolve(__dirname,'..'),dist=path.join(root,'dist');
 const read=name=>fs.readFileSync(path.join(dist,name),'utf8');
-for(const script of ['core.js','app.js'])execFileSync(process.execPath,['--check',path.join(dist,script)]);
+for(const script of ['core.js','ledger.js','auth.js','cloud-auth.js','cloud-config.js','storage.js','app.js','features.js'])execFileSync(process.execPath,['--check',path.join(dist,script)]);
+const config=require('../supabase-config.cjs');
+if(!/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(config.url)||!config.key.startsWith('sb_publishable_'))throw Error('Invalid Supabase public configuration.');
+fs.writeFileSync(path.join(dist,'cloud-config.js'),'window.VaultCloudConfig='+JSON.stringify(config)+';');
 let html=read('index.html');
 for(const match of html.matchAll(/(?:src|href)="([^"#]+)"/g)){
   const ref=match[1];
@@ -16,7 +19,9 @@ for(const icon of manifest.icons)if(!fs.existsSync(path.join(dist,icon.src)))thr
 html=html.replace('<link rel="stylesheet" href="tokens.css">',()=>'<style>'+read('tokens.css')+'</style>');
 html=html.replace('<link rel="stylesheet" href="styles.css">',()=>'<style>'+read('styles.css')+'</style>');
 html=html.replace('<link rel="stylesheet" href="reference.css">',()=>'<style>'+read('reference.css')+'</style>');
-html=html.replace('<script src="core.js"></script><script src="app.js"></script>',()=>'<script>'+read('core.js')+'</script><script>'+read('app.js')+'</script>');
+html=html.replace(/<script src="([^"]+)"><\/script>/g,(match,file)=>file.startsWith('https:')?match:'<script>'+read(file)+'</script>');
+html=html.replace('<link rel="stylesheet" href="features.css">',()=>'<style>'+read('features.css')+'</style>');
+html=html.replace('<link rel="stylesheet" href="auth.css">',()=>'<style>'+read('auth.css')+'</style>');
 html=html.replace(/(?:src|href)="(assets\/brand\/[^"]+\.svg)"/g,(whole,asset)=>whole.replace(asset,'data:image/svg+xml;base64,'+Buffer.from(read(asset)).toString('base64')));
 // The standalone export also contains an asset URL inside a JS view template.
 html=html.replaceAll('assets/brand/monogram-dark.svg','data:image/svg+xml;base64,'+Buffer.from(read('assets/brand/monogram-dark.svg')).toString('base64'));

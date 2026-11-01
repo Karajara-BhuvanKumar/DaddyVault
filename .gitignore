@@ -1,2 +1,15 @@
 release/
 *.log
+.data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+node_modules/
+.env
+.env.*
+!.env.example
+.vercel/
+*.pem
+*.key
+backups/
+.test-artifacts/

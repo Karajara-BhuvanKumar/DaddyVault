@@ -1,0 +1,1 @@
+window.VaultCloudConfig={"url":"https://sybovylydbvpvolxgryx.supabase.co","key":"sb_publishable_uDBKE4xwhezd9jSjvL5GNA_tSKrCsSv"};

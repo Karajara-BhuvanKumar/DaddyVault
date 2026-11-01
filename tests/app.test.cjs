@@ -1,99 +1,29 @@
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const vm=require('node:vm');
-const fs=require('node:fs');
-const path=require('node:path');
-function boot(storage=new Map()){
-  const elements=new Map(),events={};
-  const element=key=>{if(!elements.has(key))elements.set(key,{innerHTML:'',textContent:'',dataset:{},style:{},classList:{add(){},remove(){},toggle(){}},setAttribute(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(key);};
-  const context=vm.createContext({console,Intl,Date,Math,Number,String,Set,JSON,Error,crypto:require('node:crypto').webcrypto,FormData:class{constructor(form){return Object.entries(form.data);}},Blob,URL,setTimeout(){return 1;},clearTimeout(){},document:{querySelector:element,querySelectorAll(){return [];},addEventListener(type,fn){events[type]=fn;},body:element('body')},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},location:{hash:''}});
-  context.window=context;context.scrollTo=()=>{};context.addEventListener=()=>{};
-  for(const file of ['core.js','app.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../dist',file),'utf8'),context);
-  return {context,events,elements,storage,run:code=>vm.runInContext(code,context)};
+const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+async function boot(storage=new Map()){
+ const elements=new Map(),events={};
+ const element=key=>{if(!elements.has(key))elements.set(key,{innerHTML:'',textContent:'',dataset:{},style:{},classList:{add(){},remove(){},toggle(){}},setAttribute(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(key);};
+ const context=vm.createContext({console,Intl,Date,Math,Number,String,Set,JSON,Error,crypto:require('node:crypto').webcrypto,FormData:class{constructor(form){return Object.entries(form.data);}},Blob,URL,setTimeout(){return 1;},clearTimeout(){},document:{querySelector:element,querySelectorAll(){return [];},addEventListener(type,fn){events[type]=fn;},body:element('body')},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},location:{hash:'',protocol:'file:'}});
+ context.window=context;context.scrollTo=()=>{};context.addEventListener=()=>{};
+ for(const file of ['core.js','ledger.js','storage.js','app.js','features.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../dist',file),'utf8'),context);
+ await new Promise(resolve=>setImmediate(resolve));
+ return {context,events,elements,storage,run:code=>vm.runInContext(code,context),submit:(kind,data,id='')=>events.submit({preventDefault(){},target:{dataset:{kind,id},data}}),click:dataset=>events.click({target:{closest(){return {dataset};}}})};
 }
-test('every view renders; user text is escaped',()=>{
-  const app=boot();
-  for(const view of ['overview','transactions','investments','budgets','settings']){
-    app.run('go('+JSON.stringify(view)+')');
-    assert.ok(app.elements.get('#content').innerHTML.length>100);
-    assert.ok(!app.elements.get('#content').innerHTML.includes('NaN'));
-  }
-  app.run('state.settings.name="<img src=x onerror=alert(1)>";go("overview")');
-  assert.ok(!app.elements.get('#content').innerHTML.includes('<img src=x'));
-});
-test('Add income opens an income form with a valid income category',()=>{
-  const app=boot();
-  app.events.click({target:{closest(){return {dataset:{action:'add-income'}};}}});
-  const form=app.elements.get('#modal-body').innerHTML;
-  assert.match(form,/<option selected>income<\/option>/);
-  assert.match(form,/<option selected>Salary<\/option>/);
-  assert.ok(app.elements.get('#modal').open);
-});
-test('spending chart legend uses the selected period and excludes income',()=>{
-  const app=boot();
-  app.run(`state=F.emptyState();month='2020-01';state.transactions=[
-    {id:'1',name:'Lunch',amount:125,type:'expense',category:'Food & drinks',date:'2020-01-01',account:'Cash'},
-    {id:'2',name:'Dinner',amount:75,type:'expense',category:'Food & drinks',date:'2020-01-31',account:'Cash'},
-    {id:'3',name:'Salary',amount:900,type:'income',category:'Salary',date:'2020-01-31',account:'Bank'}];chartMode='week'`);
-  let chart=app.run('chart()');
-  assert.ok(chart.includes('₹75'));
-  assert.ok(!chart.includes('₹125'));
-  assert.ok(!chart.includes('₹900'));
-  app.run("chartMode='month'");
-  chart=app.run('chart()');
-  assert.ok(chart.includes('₹200'));
-  assert.ok(!chart.includes('NaN'));
-});
-test('empty dashboard has no fabricated balances, charts or holdings',()=>{
-  const app=boot();
-  app.run('state=F.emptyState();render()');
-  const html=app.elements.get('#content').innerHTML;
-  assert.ok(html.includes('No expenses recorded'));
-  assert.ok(html.includes('Add an investment'));
-  assert.ok(!html.includes('NaN'));
-  assert.ok(!html.includes('class="bar-segment"'));
-});
-test('transaction create, edit, persistence and delete update derived totals',()=>{
-  const app=boot();
-  app.run('persist(F.emptyState());month=F.dateString().slice(0,7);render()');
-  const form={id:'transaction-form',dataset:{id:''},data:{type:'expense',name:'Test lunch',amount:'123.45',category:'Food & drinks',date:app.run('F.dateString()'),account:'Cash'}};
-  app.events.submit({target:form,preventDefault(){}});
-  assert.equal(app.run('F.summary(state,month).expense'),123.45);
-  assert.equal(app.run('state.transactions.length'),1);
-  form.dataset.id=app.run('state.transactions[0].id');form.data.amount='200';
-  app.events.submit({target:form,preventDefault(){}});
-  assert.equal(app.run('F.summary(state,month).expense'),200);
-  assert.equal(app.run('state.transactions.length'),1);
-  const reloaded=boot(app.storage);
-  assert.equal(reloaded.run('state.transactions[0].amount'),200);
-  const button={dataset:{deleteTransaction:form.dataset.id}};
-  reloaded.events.click({target:{closest(){return button;}}});
-  reloaded.elements.get('#confirm-go').onclick();
-  assert.equal(reloaded.run('state.transactions.length'),0);
-});
-test('holding and budget forms persist values and portfolio stays separate',()=>{
-  const app=boot();app.run('persist(F.emptyState());render()');
-  app.events.submit({preventDefault(){},target:{id:'holding-form',dataset:{id:''},data:{name:'Test fund',symbol:'TST',asset:'Mutual funds',units:'5',cost:'100',price:'120',date:app.run('F.dateString()')}}});
-  assert.equal(app.run('F.summary(state,month).gain'),100);
-  assert.equal(app.run('F.summary(state,month).cash'),0);
-  app.events.submit({preventDefault(){},target:{id:'budget-form',dataset:{},data:{category:'Shopping',limit:'2500'}}});
-  assert.equal(app.run('state.budgets[0].limit'),2500);
-});
-test('filters search descriptions and restrict type and category',()=>{
-  const app=boot();
-  assert.equal(app.run('search="spotify";filteredTransactions().length'),1);
-  assert.equal(app.run('typeFilter="income";filteredTransactions().length'),0);
-  assert.ok(app.run('search="";typeFilter="expense";categoryFilter="Shopping";filteredTransactions().every(t=>t.category==="Shopping"&&t.type==="expense")'));
-});
-test('branding keeps existing Folio storage and backup records intact',()=>{
-  const F=require('../dist/core.js');
-  const saved=F.emptyState({name:'Existing user',currency:'INR',openingBalance:4321.55});
-  saved.transactions=[{id:'legacy-transaction',name:'Preserved record',amount:250,type:'expense',category:'Other',date:'2025-01-01',account:'Cash'}];
-  const original=JSON.stringify(saved),storage=new Map([['folio-data-v1',original]]);
-  const app=boot(storage);
-  for(const screen of ['overview','transactions','investments','budgets','settings'])app.run('go('+JSON.stringify(screen)+')');
-  assert.equal(app.run('state.settings.openingBalance'),4321.55);
-  assert.equal(app.run('state.transactions[0].id'),'legacy-transaction');
-  assert.equal(storage.get('folio-data-v1'),original);
-  assert.equal(storage.size,1);
-});
+const income={type:'income',name:'Salary',amount:'10000',category:'Salary',date:'2025-01-15',accountId:'cash',paymentMethod:'Bank',notes:'Source',repeat:'One time'};
+test('all nine screens render empty and sample states; user content is escaped',async()=>{const a=await boot();for(const sample of [false,true]){if(sample)a.run('state=store.enterDemo()');for(const screen of ['overview','transactions','investments','budgets','settings','accounts','goals','reports','recurring']){a.run('go('+JSON.stringify(screen)+')');const html=a.elements.get('#content').innerHTML;assert.ok(html.length>100,screen);assert.ok(!html.includes('NaN'),screen);assert.ok(!html.includes('undefined'),screen);}}a.run('state.settings.name="<img src=x onerror=alert(1)>";go("overview")');assert.ok(!a.elements.get('#content').innerHTML.includes('<img src=x'));});
+test('income, expense, edit and delete handlers persist and recalculate',async()=>{const a=await boot();await a.submit('entry',income);await a.submit('entry',{...income,type:'expense',name:'Lunch',amount:'2000',category:'Food & drinks'});assert.equal(a.run('current().cash'),8000);const id=a.run('state.transactions[1].id');await a.submit('entry',{...income,type:'expense',name:'Lunch',amount:'1000',category:'Food & drinks'},id);assert.equal(a.run('current().cash'),9000);const b=await boot(a.storage);assert.equal(b.run('current().cash'),9000);await b.click({deleteEntry:id});await b.elements.get('#confirm-go').onclick();assert.equal(b.run('current().cash'),10000);});
+test('account creation and transfer handlers conserve total cash',async()=>{const a=await boot();await a.submit('entry',income);await a.submit('account',{name:'Bank',type:'Bank Account',openingBalance:'0'});const dest=a.run('state.accounts[1].id');await a.submit('entry',{...income,type:'transfer',amount:'1000',toAccountId:dest});assert.equal(a.run('current().accounts[0].balance'),9000);assert.equal(a.run('current().accounts[1].balance'),1000);assert.equal(a.run('current().cash'),10000);});
+test('goal creation, contribution and withdrawal handlers enforce accounting',async()=>{const a=await boot();await a.submit('entry',income);await a.submit('goal',{name:'Buffer',type:'savings',target:'20000',monthlyTarget:'1000',startDate:'2025-01-01',targetDate:'2027-01-01',notes:''});const goalId=a.run('state.goals[0].id');await a.submit('entry',{...income,type:'contribution',amount:'5000',goalId});assert.equal(a.run('F.goal(state,state.goals[0]).pct'),25);assert.equal(a.run('current().netWorth'),10000);await a.submit('entry',{...income,type:'withdrawal',amount:'6000',goalId});assert.equal(a.run('current().allocated'),5000);assert.match(a.elements.get('#app-error').innerHTML,/Withdrawal exceeds/);});
+test('investment creation, valuation, purchase and partial sale handlers',async()=>{const a=await boot();await a.submit('entry',income);const data={name:'Index fund',symbol:'IDX',asset:'Mutual funds',mode:'purchase',units:'100',cost:'100',price:'120',date:'2025-01-15',openingDate:'2025-01-01',accountId:'cash',notes:''};await a.submit('holding',data);assert.equal(a.run('current().cash'),0);assert.equal(a.run('current().gain'),2000);const id=a.run('state.holdings[0].id');await a.submit('entry',{...income,type:'sell',holdingId:id,units:'50',amount:'6000'});assert.equal(a.run('current().cash'),6000);assert.equal(a.run('current().holdings[0].units'),50);await a.submit('holding',{...data,openingUnits:'0',openingCost:'0',price:'130'},id);assert.equal(a.run('current().holdings[0].value'),6500);});
+test('budget form and category rename update dependent records',async()=>{const a=await boot();await a.submit('budget',{category:'Food & drinks',month:'2025-01',limit:'5000'});await a.submit('entry',{...income,type:'expense',amount:'2000',category:'Food & drinks'});assert.equal(a.run('F.budget(state,state.budgets[0],"2025-01").pct'),40);await a.submit('category',{original:'Food & drinks',categoryType:'expense',name:'Meals',symbol:'food'});assert.equal(a.run('state.transactions[0].category'),'Meals');assert.equal(a.run('state.budgets[0].category'),'Meals');});
+test('recurring form, posting and optional recurrence avoid duplicate entries',async()=>{const a=await boot();await a.submit('entry',{...income,repeat:'monthly'});assert.equal(a.run('state.recurring.length'),1);await a.run('change(s=>F.postDue(s,"2025-03-15"))');const count=a.run('state.transactions.length');await a.run('change(s=>F.postDue(s,"2025-03-15"))');assert.equal(a.run('state.transactions.length'),count);await a.submit('recurring',{name:'Rent',type:'expense',category:'Bills & rent',amount:'100',accountId:'cash',paymentMethod:'Bank',notes:'',frequency:'monthly',startDate:'2025-01-01',endDate:'2025-02-01'});assert.equal(a.run('state.recurring.length'),2);});
+test('search, account, method, category, dates, sorting and pagination work',async()=>{const a=await boot();a.run('state=store.enterDemo();render()');assert.equal(a.run('search="spotify";filteredTransactions().length'),1);assert.equal(a.run('typeFilter="income";filteredTransactions().length'),0);assert.ok(a.run('search="";typeFilter="expense";categoryFilter="Shopping";sortBy="amount-asc";filteredTransactions()[0].amount<=filteredTransactions()[1].amount'));assert.equal(a.run('accountFilter="missing";filteredTransactions().length'),0);a.run('accountFilter="all";methodFilter="Cash"');assert.equal(a.run('filteredTransactions().length'),0);a.run('methodFilter="all";categoryFilter="all";rangeKey="custom";customStart="2000-01-01";customEnd="2000-02-01"');assert.equal(a.run('filteredTransactions().length'),0);});
+test('legacy data migrates while preserving untouched original backup',async()=>{const F=require('../dist/core.js'),saved=F.emptyState({name:'Existing user',currency:'INR',openingBalance:4321.55});saved.transactions=[{id:'old1',name:'Record',amount:250,type:'expense',category:'Other',date:'2025-01-01',account:'Cash'}];const original=JSON.stringify(saved),map=new Map([['folio-data-v1',original]]),a=await boot(map);assert.equal(a.run('current().cash'),4071.55);assert.equal(a.run('state.transactions[0].id'),'old1');assert.equal(map.get('folio-data-v1'),original);assert.ok(map.has('daddyvault-real-v2'));});
+test('duplicate submit is blocked while save is pending; rejected writes retain the form',async()=>{const a=await boot();let resolve;const pending=new Promise(r=>resolve=r);a.context.delaySave=()=>pending;a.run('store.save=delaySave');const first=a.submit('entry',income);await a.submit('entry',income);assert.equal(a.run('state.transactions.length'),0);resolve(a.run('F.emptyState()'));await first;assert.equal(a.run('busy'),false);a.run('store.save=async()=>{throw Error("Disk full")};entryForm()');await a.submit('entry',income);assert.equal(a.elements.get('#modal').open,true);assert.match(a.elements.get('#app-error').innerHTML,/Disk full/);assert.equal(a.run('state.transactions.length'),0);});
+test('CSV neutralizes spreadsheet formulas and includes all ledger types',async()=>{const a=await boot();assert.ok(a.run('csv([{...F.emptyState(),name:"=HYPERLINK(1)",type:"transfer",date:"2025-01-01",accountId:"cash",amount:1,notes:"a,b"}])').includes("'=HYPERLINK"));});
+test('all public add actions open valid forms',async()=>{const a=await boot();for(const action of ['add-income','add-transaction','add-account','add-holding','add-goal','add-budget','add-recurring','add-category','transfer','repayment']){await a.click({action});assert.ok(a.elements.get('#modal').open);assert.ok(a.elements.get('#modal-body').innerHTML.includes('type="submit"'));}});
+const {test:moreTest}=require('node:test');
+moreTest('settings persist timezone, format and default account without changing balances',async()=>{const a=await boot();await a.submit('entry',income);await a.submit('settings',{name:'Updated name',currency:'INR',timezone:'Asia/Kolkata',dateFormat:'DD/MM/YYYY',defaultAccount:'cash'});assert.equal(a.run('state.settings.name'),'Updated name');assert.equal(a.run('formatDate("2025-01-15")'),'15/01/2025');assert.equal(a.run('current().cash'),10000);const b=await boot(a.storage);assert.equal(b.run('state.settings.dateFormat'),'DD/MM/YYYY');});
+moreTest('pagination renders only 25 records and advances to the remainder',async()=>{const a=await boot();await a.run('change(s=>{for(let i=0;i<30;i++)s.transactions.push({id:"entry"+i,name:"Record "+i,type:"income",amount:i+1,date:today(),accountId:"cash",category:"Salary",paymentMethod:"Cash",notes:""})})');a.run('go("transactions")');let html=a.elements.get('#content').innerHTML;assert.equal((html.match(/data-edit-entry=/g)||[]).length,25);await a.click({page:'1'});html=a.elements.get('#transaction-results').innerHTML;assert.equal((html.match(/data-edit-entry=/g)||[]).length,5);assert.ok(html.includes('Page 2 of 2'));});
+moreTest('archive and schedule pause handlers update saved state',async()=>{const a=await boot();await a.submit('account',{name:'Unused bank',type:'Bank Account',openingBalance:'0'});const id=a.run('state.accounts[1].id');await a.click({archiveAccount:id});await a.elements.get('#confirm-go').onclick();assert.equal(a.run('state.accounts[1].archived'),true);await a.submit('recurring',{name:'Salary',type:'income',category:'Salary',amount:'100',accountId:'cash',paymentMethod:'Bank',notes:'',frequency:'monthly',startDate:'2025-01-01',endDate:'2025-02-01'});const schedule=a.run('state.recurring[0].id');await a.click({toggleRecurring:schedule});assert.equal(a.run('state.recurring[0].active'),false);});
+moreTest('JSON restore validates and replaces real records only after confirmation',async()=>{const a=await boot();await a.submit('entry',income);const backup=a.run('JSON.stringify(state)');await a.run('change(s=>{s.transactions=[]})');const target={id:'import-file',value:'backup.json',files:[{size:backup.length,text:async()=>backup}]};await a.events.change({target});assert.equal(a.run('state.transactions.length'),0);await a.elements.get('#confirm-go').onclick();assert.equal(a.run('current().cash'),10000);target.files=[{size:3,text:async()=>'{x}'}];await a.events.change({target});assert.equal(a.run('current().cash'),10000);assert.ok(!a.elements.get('#app-error').hidden);});
+moreTest('Last 7 days chart includes dates from the preceding month',async()=>{const a=await boot();a.run('state.transactions=[{id:"prior",type:"expense",name:"Prior month",amount:75,date:"2025-01-30",accountId:"cash",category:"Food & drinks",paymentMethod:"Cash",notes:""}];month="2025-02";chartMode="week"');a.run('F.dateString=()=>"2025-02-02"');const html=a.run('chart()');assert.ok(html.includes('75'));assert.ok(html.includes('27 Jan 2025'));assert.ok(html.includes('2 Feb 2025'));});

@@ -1,12 +1,18 @@
 {
   "name": "daddyvault",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "DaddyVault - Track it. Grow it. Protect it.",
   "scripts": {
-    "start": "node server.cjs",
+    "start": "node --env-file-if-exists=.env scripts/cloud-server.cjs",
     "build": "node scripts/build.cjs",
     "test": "node --test tests/*.test.cjs",
-    "check": "node --check dist/core.js && node --check dist/app.js && node --check scripts/build.cjs"
+    "check": "node --check dist/core.js && node --check dist/ledger.js && node --check dist/storage.js && node --check dist/app.js && node --check dist/features.js && node --check database.cjs && node --check server.cjs && node --check scripts/build.cjs && node --check auth.cjs && node --check dist/auth.js && node --check scripts/password-hash.cjs && node --check scripts/configure-vercel.cjs && node --check api/state.js && node --check dist/cloud-auth.js && node --check scripts/cloud-server.cjs",
+    "password:hash": "node scripts/password-hash.cjs",
+    "start:legacy": "node --env-file-if-exists=.env server.cjs",
+    "export:legacy": "node --env-file-if-exists=.env scripts/export-legacy.cjs"
+  },
+  "engines": {
+    "node": ">=22.13.0 <23"
   }
 }

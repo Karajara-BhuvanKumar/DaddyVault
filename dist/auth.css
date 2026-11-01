@@ -1,0 +1,9 @@
+#auth-dialog { width: min(420px, calc(100% - 32px)); padding: 28px; }
+#auth-dialog::backdrop { background: var(--bg); }
+#auth-dialog .brand-symbol { margin-bottom: 16px; }
+#auth-dialog h2 { margin: 0 0 12px; }
+#auth-dialog p { color: var(--text-secondary); line-height: 1.6; }
+#auth-form { display: grid; gap: 16px; margin-top: 24px; }
+#auth-error { color: var(--negative); margin: 0; }
+#sign-out[hidden] { display: none; }
+@media(max-width: 480px) { #sign-out { padding: 8px; font-size: 12px; } }
