@@ -7,7 +7,16 @@
  let linkError=fragment.get('error_description')||params.get('error_description');
  let client,pending=null,resolvePending=null,identity=null,mode='login',submitting=false;
  const redirect='https://daddy-vault.vercel.app/';
- function cleanURL(){if(root.history)root.history.replaceState(null,'',location.pathname||'/');}
+ function cleanURL(){
+  if(!root.history)return;
+  const hash=location.hash||'',search=location.search||'';
+  const hasAuthHash=/access_token=|refresh_token=|error_description=|type=/.test(hash);
+  const hasAuthSearch=/auth=recovery|code=|error_description=/.test(search);
+  if(!hasAuthHash&&!hasAuthSearch)return;
+  const cleanHash=hasAuthHash?'':hash;
+  const cleanSearch=hasAuthSearch?'':search;
+  root.history.replaceState(null,'',(location.pathname||'/')+cleanSearch+cleanHash);
+ }
  function connection(){
   if(!root.supabase)throw Error('Supabase sign-in could not load. Check your internet connection and reload.');
   if(!client){

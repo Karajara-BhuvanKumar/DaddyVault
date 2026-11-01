@@ -438,3 +438,155 @@ test('Full Real User Simulation: End-to-end multi-account, transfers, budgets, c
     assert.ok(!content.includes('undefined'), `Screen ${screen} should not have undefined`);
   }
 });
+
+test('Authentication: cleanURL preserves legitimate routes and strips auth tokens', async () => {
+  const cloudAuthSrc = fs.readFileSync(path.join(__dirname, '../dist/cloud-auth.js'), 'utf8');
+
+  // Test Case A: User navigates to #transactions, cleanURL does NOT destroy it
+  {
+    const historyCalls = [];
+    const elements = new Map();
+    const get = id => {
+      if (!elements.has(id)) elements.set(id, { value: '', hidden: true, open: false, showModal() { this.open = true; }, close() { this.open = false; }, focus() {}, reset() {} });
+      return elements.get(id);
+    };
+    const ctx = vm.createContext({
+      URLSearchParams,
+      document: { getElementById: get },
+      location: { protocol: 'https:', pathname: '/', search: '', hash: '#transactions' },
+      history: { replaceState(...args) { historyCalls.push(args); } },
+      VaultCloudConfig: { url: 'https://example.supabase.co', key: 'public' },
+      supabase: { createClient: () => ({ auth: { onAuthStateChange() {}, async getSession() { return { data: { session: { user: { id: 'u1' }, access_token: 'tok' } } }; } } }) },
+      confirm: () => true,
+      alert() {}
+    });
+    ctx.window = ctx;
+    vm.runInContext(cloudAuthSrc, ctx);
+    await ctx.VaultAuth.ensure();
+    // cleanURL should NOT have replaced #transactions
+    assert.equal(historyCalls.length, 0, '#transactions route must not be replaced');
+    assert.equal(ctx.location.hash, '#transactions');
+  }
+
+  // Test Case B: User arrives with callback tokens #access_token=...&refresh_token=...
+  {
+    const historyCalls = [];
+    const elements = new Map();
+    const get = id => {
+      if (!elements.has(id)) elements.set(id, { value: '', hidden: true, open: false, showModal() { this.open = true; }, close() { this.open = false; }, focus() {}, reset() {} });
+      return elements.get(id);
+    };
+    const ctx = vm.createContext({
+      URLSearchParams,
+      document: { getElementById: get },
+      location: { protocol: 'https:', pathname: '/', search: '', hash: '#access_token=secret_jwt&refresh_token=secret_refresh&type=signup' },
+      history: { replaceState(...args) { historyCalls.push(args); ctx.location.hash = args[2].includes('#') ? args[2].slice(args[2].indexOf('#')) : ''; } },
+      VaultCloudConfig: { url: 'https://example.supabase.co', key: 'public' },
+      supabase: { createClient: () => ({ auth: { onAuthStateChange() {}, async getSession() { return { data: { session: { user: { id: 'u1' }, access_token: 'tok' } } }; } } }) },
+      confirm: () => true,
+      alert() {}
+    });
+    ctx.window = ctx;
+    vm.runInContext(cloudAuthSrc, ctx);
+    await ctx.VaultAuth.ensure();
+    // cleanURL MUST have stripped the auth tokens
+    assert.ok(historyCalls.length > 0, 'Auth tokens must be cleaned via replaceState');
+    assert.equal(historyCalls[0][2], '/', 'URL must be cleaned to root without tokens');
+    assert.equal(ctx.location.hash, '', 'Auth hash must be empty after cleanup');
+  }
+
+  // Test Case C: Password recovery search query ?auth=recovery
+  {
+    const historyCalls = [];
+    const elements = new Map();
+    const get = id => {
+      if (!elements.has(id)) elements.set(id, { value: '', hidden: true, open: false, showModal() { this.open = true; }, close() { this.open = false; }, focus() {}, reset() {} });
+      return elements.get(id);
+    };
+    const ctx = vm.createContext({
+      URLSearchParams,
+      document: { getElementById: get },
+      location: { protocol: 'https:', pathname: '/', search: '?auth=recovery', hash: '#access_token=recovery_jwt' },
+      history: { replaceState(...args) { historyCalls.push(args); ctx.location.search = ''; ctx.location.hash = ''; } },
+      VaultCloudConfig: { url: 'https://example.supabase.co', key: 'public' },
+      supabase: { createClient: () => ({ auth: { onAuthStateChange() {}, async getSession() { return { data: { session: null } }; } } }) },
+      confirm: () => true,
+      alert() {}
+    });
+    ctx.window = ctx;
+    vm.runInContext(cloudAuthSrc, ctx);
+    const ensurePromise = ctx.VaultAuth.ensure();
+    await new Promise(r => setImmediate(r));
+    assert.ok(historyCalls.length > 0, 'Recovery query and hash must be stripped');
+    assert.equal(historyCalls[0][2], '/');
+  }
+});
+
+test('Edge Cases: Repayment guard without credit card, available balance color warning, cloud init default name', async () => {
+  const sim = await bootSim();
+
+  // 1. Initial cloud setup default name is "Bhuvan Kumar" (not "My vault")
+  const F = sim.run('Vault');
+  const {createStorage} = require('../dist/storage.js');
+  let savedState = null;
+  const mockStorageClient = createStorage({
+    storage: { getItem: () => null, setItem: () => {} },
+    fetcher: async (url, opts) => {
+      if (opts.method === 'GET') return { ok: true, json: async () => ({ state: null, revision: 0, allowBrowserImport: false }) };
+      if (opts.method === 'PUT') {
+        savedState = JSON.parse(opts.body).state;
+        return { ok: true, json: async () => ({ state: savedState, revision: 1 }) };
+      }
+    }
+  });
+  const loadedState = await mockStorageClient.load();
+  assert.equal(loadedState.settings.name, 'Bhuvan Kumar', 'Default cloud state must be Bhuvan Kumar, not My vault');
+  assert.equal(savedState.settings.name, 'Bhuvan Kumar');
+
+  // 2. Repayment form guard when no Credit Card account exists
+  // Sim currently only has default Cash account (no credit cards)
+  sim.run('entryForm(null, "repayment")');
+  const modalBody = sim.getEl('#modal-body').innerHTML;
+  assert.ok(modalBody.includes('No active credit card accounts found'), 'Repayment form must display actionable warning when no credit card exists');
+
+  // 3. Negative available cash with positive total cash
+  // Cash = 10,000, Goal allocation = 10,000. Available cash = 0.
+  // Add income of 10,000 to cash
+  await sim.submit('entry', {
+    type: 'income',
+    name: 'Bonus',
+    amount: '10000',
+    category: 'Salary',
+    date: '2026-11-02',
+    accountId: 'cash',
+    paymentMethod: 'UPI',
+    notes: ''
+  });
+  // Available balance color checks (s.available < 0 || s.cash < 0)
+  sim.run('go("overview")');
+  const overviewHtml = sim.getEl('#content').innerHTML;
+  assert.ok(overviewHtml.includes('Available balance'));
+  assert.ok(!overviewHtml.includes('money coral'), 'Available balance money element should not be coral when balance is positive');
+
+  // 4. Duplicate submission protection
+  // While busy is true, submit and click events are ignored
+  sim.run('busy = true');
+  let rejected = false;
+  try {
+    await sim.submit('entry', {
+      type: 'income',
+      name: 'Duplicate attempt',
+      amount: '5000',
+      category: 'Salary',
+      date: '2026-11-02',
+      accountId: 'cash',
+      paymentMethod: 'Cash',
+      notes: ''
+    });
+  } catch (e) {
+    rejected = true;
+  }
+  sim.run('busy = false');
+  assert.equal(sim.run('state.transactions.some(t=>t.name==="Duplicate attempt")'), false, 'Duplicate submissions while busy must be prevented');
+});
+
