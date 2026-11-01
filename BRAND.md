@@ -1,3 +1,5 @@
+> Current UI update: the supplied dark banking references supersede the earlier navy-and-emerald surface treatment below. Active UI colors live in dist/tokens.css: graphite #111111, charcoal #1a1a1a, coral action #f4775e, white #f5f5f5. dist/reference.css applies textured cards, soft lighting, compact charts and translucent bottom navigation. The DaddyVault name, tagline and existing logo assets are retained.
+
 # DaddyVault identity
 
 **Track it. Grow it. Protect it.**

@@ -15,6 +15,7 @@ const manifest=JSON.parse(read('site.webmanifest'));
 for(const icon of manifest.icons)if(!fs.existsSync(path.join(dist,icon.src)))throw Error('Missing app icon: '+icon.src);
 html=html.replace('<link rel="stylesheet" href="tokens.css">',()=>'<style>'+read('tokens.css')+'</style>');
 html=html.replace('<link rel="stylesheet" href="styles.css">',()=>'<style>'+read('styles.css')+'</style>');
+html=html.replace('<link rel="stylesheet" href="reference.css">',()=>'<style>'+read('reference.css')+'</style>');
 html=html.replace('<script src="core.js"></script><script src="app.js"></script>',()=>'<script>'+read('core.js')+'</script><script>'+read('app.js')+'</script>');
 html=html.replace(/(?:src|href)="(assets\/brand\/[^"]+\.svg)"/g,(whole,asset)=>whole.replace(asset,'data:image/svg+xml;base64,'+Buffer.from(read(asset)).toString('base64')));
 // The standalone export also contains an asset URL inside a JS view template.

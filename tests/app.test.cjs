@@ -21,6 +21,38 @@ test('every view renders; user text is escaped',()=>{
   app.run('state.settings.name="<img src=x onerror=alert(1)>";go("overview")');
   assert.ok(!app.elements.get('#content').innerHTML.includes('<img src=x'));
 });
+test('Add income opens an income form with a valid income category',()=>{
+  const app=boot();
+  app.events.click({target:{closest(){return {dataset:{action:'add-income'}};}}});
+  const form=app.elements.get('#modal-body').innerHTML;
+  assert.match(form,/<option selected>income<\/option>/);
+  assert.match(form,/<option selected>Salary<\/option>/);
+  assert.ok(app.elements.get('#modal').open);
+});
+test('spending chart legend uses the selected period and excludes income',()=>{
+  const app=boot();
+  app.run(`state=F.emptyState();month='2020-01';state.transactions=[
+    {id:'1',name:'Lunch',amount:125,type:'expense',category:'Food & drinks',date:'2020-01-01',account:'Cash'},
+    {id:'2',name:'Dinner',amount:75,type:'expense',category:'Food & drinks',date:'2020-01-31',account:'Cash'},
+    {id:'3',name:'Salary',amount:900,type:'income',category:'Salary',date:'2020-01-31',account:'Bank'}];chartMode='week'`);
+  let chart=app.run('chart()');
+  assert.ok(chart.includes('₹75'));
+  assert.ok(!chart.includes('₹125'));
+  assert.ok(!chart.includes('₹900'));
+  app.run("chartMode='month'");
+  chart=app.run('chart()');
+  assert.ok(chart.includes('₹200'));
+  assert.ok(!chart.includes('NaN'));
+});
+test('empty dashboard has no fabricated balances, charts or holdings',()=>{
+  const app=boot();
+  app.run('state=F.emptyState();render()');
+  const html=app.elements.get('#content').innerHTML;
+  assert.ok(html.includes('No expenses recorded'));
+  assert.ok(html.includes('Add an investment'));
+  assert.ok(!html.includes('NaN'));
+  assert.ok(!html.includes('class="bar-segment"'));
+});
 test('transaction create, edit, persistence and delete update derived totals',()=>{
   const app=boot();
   app.run('persist(F.emptyState());month=F.dateString().slice(0,7);render()');

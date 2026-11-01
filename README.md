@@ -2,7 +2,7 @@
 
 **Track it. Grow it. Protect it.**
 
-A personal finance workspace for expenses, income, manual investments, and monthly budgets. The navy-and-emerald identity is applied throughout the existing application.
+A personal finance workspace for expenses, income, manual investments, and monthly budgets. The screenshot-led interface uses charcoal surfaces, textured balance and cash-flow cards, coral actions, stacked spending bars, and translucent bottom navigation.
 
 ## Run locally
 
@@ -34,7 +34,7 @@ No lint script or linter is configured. The check command validates JavaScript s
 - Monthly category limits with overspend indicators.
 - INR default; optional USD, EUR, GBP display labels.
 - JSON backups, validated restore, sample data and reset workflow.
-- Desktop sidebar, tablet icon rail, mobile bottom navigation.
+- Responsive two-column desktop overview, stacked mobile layout, and bottom navigation.
 - Seven scalable logo variants, semantic design tokens and brand documentation.
 
 ## Existing data remains compatible
@@ -53,7 +53,8 @@ See BRAND.md for the logo system, colors, typography, accessibility and messagin
 
 - dist/index.html: DaddyVault identity, metadata, navigation shell and accessible dialog.
 - dist/tokens.css: semantic brand, surface, text, status and chart tokens.
-- dist/styles.css: unified visual system and responsive rules.
+- dist/styles.css: base components, forms, tables and responsive rules.
+- dist/reference.css: screenshot-led graphite visual system and responsive overrides.
 - dist/app.js: branded screens, chart colors, presentation and export filenames.
 - dist/core.js: existing financial calculations and data validation, unchanged.
 - dist/assets/brand/: primary/light/dark horizontal SVGs, two monograms, app icon and favicon.
