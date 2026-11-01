@@ -54,7 +54,7 @@ The existing .data/daddyvault.sqlite is preserved. Run npm run export:legacy to 
 
 ## Verification and manual acceptance
 
-All 73 local tests, JavaScript syntax checks and the production build pass. Tests cover signup validation, email-confirmation handling, immediate sessions, reset requests, provider errors, valid and expired recovery links, recovery events and the existing finance workflows. SDK email flows use mocks; no real password or mailbox was used.
+All 74 local tests, JavaScript syntax checks and the production build pass. Tests cover signup validation, email-confirmation handling, immediate sessions, reset requests, provider errors, valid and expired recovery links, recovery events and the existing finance workflows. SDK email flows use mocks; no real password or mailbox was used. Vercel deployment and the production sign-up and recovery forms were verified; the recovery layout was checked at mobile width. The transaction-history helper was renamed to preserve the browser History API required by auth redirect handling.
 
 Live Supabase SQL tests with temporary users passed inside a rolled-back transaction: two users independently registered and saved vaults; cross-user reads, updates, registration and anonymous reads were blocked. No test users or records were retained. The security advisor reports leaked-password protection disabled, with no table/RLS findings.
 
