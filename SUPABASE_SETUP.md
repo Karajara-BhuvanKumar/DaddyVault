@@ -1,22 +1,34 @@
-# DaddyVault — Supabase setup
+# DaddyVault - Supabase setup
 
-The app now targets https://sybovylydbvpvolxgryx.supabase.co (DaddyVault). Supabase handles authentication and persistent Postgres storage; Vercel hosts the existing frontend and `api/state.js`. Render is no longer required. The previous SQLite server is retained for recovering local records only.
+The app uses https://sybovylydbvpvolxgryx.supabase.co for authentication and Postgres storage. Vercel serves the existing frontend and api/state.js. Render is not required. The SQLite server is retained only for recovering local records.
 
-## Applied database setup
+## Accounts and database
 
-Migration `20261101182118_daddyvault_private_workspace.sql` is applied to the live project. `vault_owners` allows exactly one owner, tied to an existing Supabase Auth user. `vault_workspaces` holds the complete existing finance format as JSONB. `vault_revisions` retains 30 saved versions. All tables have RLS and explicit privileges. Anonymous requests cannot read records; other authenticated users cannot read or write the owner's records. `save_vault` uses an advisory transaction lock plus expected revision checking to reject simultaneous stale saves.
+Both migrations in supabase/migrations are applied to this project. On a new Supabase project, apply them in filename order using the Supabase CLI or SQL Editor. The second migration removes the original single-account limit. Each signed-in email account registers its own vault automatically; there is no manual owner SQL step.
 
-The Vercel API validates the user's JWT with Supabase and checks owner membership. It validates all financial relationships with the existing `ledger.js` before saving with the user's JWT (no privileged service key). The Supabase security advisor returned no findings. Authenticated database clients can edit their own data subject to RLS; the application API supplies the full financial validation. Nobody can add themselves to the owner table through the public API.
+Every table has Row Level Security. Users can only register their own UUID and access their own workspace and revision history. Anonymous Auth accounts are rejected. The API verifies the JWT with Supabase and validates all financial relationships before saving with that user's JWT. No service-role key is used. save_vault locks each user's workspace and checks its revision to reject stale saves; it retains 30 revisions.
 
-## One remaining account step
+## Required Auth dashboard settings
 
-This project had no Auth users. Create your own email/password user in Supabase Dashboard → Authentication → Users → Add user. Enter your password there, not in chat. Copy its UUID. Enable it as owner in SQL Editor:
+Open https://supabase.com/dashboard/project/sybovylydbvpvolxgryx/auth/url-configuration
 
-```sql
-insert into public.vault_owners(user_id) values ('YOUR_AUTH_USER_UUID');
-```
+- Set Site URL to https://daddy-vault.vercel.app/
+- Add these exact allowed Redirect URLs:
+  - https://daddy-vault.vercel.app/
+  - https://daddy-vault.vercel.app/?auth=recovery
+- Enable email/password authentication and allow new users to sign up.
+- Keep email confirmation enabled for production.
+- Configure a production SMTP provider in Authentication email settings, including its verified sender/domain. Supabase's default mail service restricts recipients and is not a general production email service. Keep SMTP passwords in Supabase settings only.
+- Use the standard confirmation and password recovery templates with the Supabase ConfirmationURL link; do not replace the recovery link with the homepage.
+- Review password policy and enable leaked-password protection if available for your plan. The security advisor currently reports that protection as disabled.
 
-Or send the user UUID to the assistant to enable it. Do not send your password. Until this is done, financial access is intentionally blocked. The app does not offer public signup; public signups, even if enabled in project settings, cannot access this vault. For a private deployment, disable new signups in Auth settings after creating your owner.
+These dashboard settings and actual email delivery have NOT been verified or changed by this implementation. See https://supabase.com/docs/guides/auth/auth-smtp and https://supabase.com/docs/guides/auth/redirect-urls .
+
+## Sign-up and recovery behavior
+
+Create an account opens email, password and confirmation fields within the existing dialog. New passwords require at least 12 characters. When confirmation is required, the app stays locked and asks the user to check email. Confirmed users sign in and receive a private empty vault.
+
+Forgot password requests a Supabase email with a recovery redirect to the production site. The recovery screen updates the password, signs out sessions globally and asks the user to sign in again. Expired links show a new reset request. Already-issued JWTs may remain valid until their expiry even after session revocation. Errors are displayed without claiming successful email delivery or password changes. Reset acknowledgements do not reveal whether the email is registered.
 
 ## Run and deploy
 
@@ -28,32 +40,24 @@ npm run build
 npm start
 ```
 
-Open http://localhost:8080. Sign in with the Supabase account above. `npm start` serves the app and cloud API; it no longer opens SQLite. Internet access is required.
+Open http://localhost:8080. The app uses the cloud API and requires internet access. Email links intentionally return to the canonical production site, including when testing the local frontend.
 
-On Vercel import this repository, choose Other, Node 22.x, build `npm run build`, output `dist`, install `npm ci`. The committed `vercel.json` deploys `/api/state` as a Node function; there is no external Render rewrite. Do not run the old Render configuration generator. No custom environment variables are required for this specific project because its non-secret URL and publishable key are configured in `supabase-config.cjs`. Optional Vercel overrides: `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Only public keys may go in this configuration. Never use a service-role/secret key. If changing project, also update the CSP connect-src domain in vercel.json.
+On Vercel import the repository, choose Other, Node 22.x, build npm run build, output dist and install npm ci. The committed vercel.json deploys /api/state as a Node function. Push changes to the linked production branch or redeploy that branch in Vercel.
 
-Build writes those public values into `dist/cloud-config.js`. Supabase Auth SDK is pinned to 2.76.1 and loaded from jsDelivr; it manages session persistence and token refresh. No CDN version range is used. This environment could not reach the npm registry, so no npm SDK dependency was installed. CDN availability and real browser sign-in still require verification on your machine.
+No custom environment variables are required for this project: supabase-config.cjs contains only the public URL and publishable key. Optional overrides are SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY. Never substitute a service-role/secret key. Build writes public configuration into dist/cloud-config.js. When changing the project or host, also update the CSP connect-src domain in vercel.json, the canonical redirect in dist/cloud-auth.js and the Supabase URL settings.
 
-Set the production URL in Supabase Auth URL Configuration when deployed. Email confirmation/reset or other redirect-based flows require matching allowed redirects. Current app login uses an already-created email/password account; it does not implement an in-app password-reset flow. Change/reset credentials through Supabase as needed.
+Supabase Auth SDK is pinned to 2.76.1 on jsDelivr and manages session persistence and token refresh. CDN access is required.
 
-## Move existing records
+## Recover existing local records
 
-The existing `.data/daddyvault.sqlite` has been preserved. Cloud import is pending the owner's account setup; no financial records have been uploaded yet.
+The existing .data/daddyvault.sqlite is preserved. Run npm run export:legacy to create a private JSON backup under ignored backups/. Start the cloud app, sign in and use Settings > Restore backup. Review the replace confirmation: restore replaces the workspace rather than merging it. Compare balances and refresh on a second device before retiring the local copy. The offline HTML uses browser storage and does not synchronize.
 
-1. Stop the cloud server, then run `npm run start:legacy` to open the original local database.
-2. Use the legacy export command below if the cloud frontend prevents legacy UI access. It reads SQLite in read-only mode and writes a private JSON backup under ignored `backups/`:
+## Verification and manual acceptance
 
-   ```powershell
-   npm run export:legacy
-   ```
+All 73 local tests, JavaScript syntax checks and the production build pass. Tests cover signup validation, email-confirmation handling, immediate sessions, reset requests, provider errors, valid and expired recovery links, recovery events and the existing finance workflows. SDK email flows use mocks; no real password or mailbox was used.
 
-3. Start the cloud app with `npm start`, sign in, then Settings → Restore backup. Review the replace confirmation. This replaces the cloud workspace; it does not merge it.
-4. Compare balances, transactions, investments and goals. Refresh and verify on a second device before retiring your local copy.
+Live Supabase SQL tests with temporary users passed inside a rolled-back transaction: two users independently registered and saved vaults; cross-user reads, updates, registration and anonymous reads were blocked. No test users or records were retained. The security advisor reports leaked-password protection disabled, with no table/RLS findings.
 
-The offline HTML still uses browser storage and does not synchronize. No redesign of the finance screens was made; cloud sign-in adds an email input.
+After deployment and configuring email, test with an email address you control: sign up, confirm email, sign in, save a record, refresh, sign out, request a reset and follow its link, set a new password and sign in again. Repeat on mobile and verify another account has an empty private vault. Real mailbox delivery and full authenticated browser testing remain manual acceptance steps.
 
-## Verification
-
-Real Supabase SQL tests ran inside a rollback transaction using temporary users: owner save/update, stale revision rejection, another user's denied reads/writes, and anonymous denial all passed. Test users and records were rolled back. All 66 local tests passed, as did JavaScript syntax checks and the production build. These include existing financial workflows plus the new API and Supabase sign-in adapter. No actual owner account/password login or browser/mobile end-to-end test has been performed yet. The website has not been published.
-
-This guide supersedes the earlier SQLite/Render deployment instructions in DEPLOYMENT.md.
+This guide supersedes the original SQLite/Render deployment instructions in DEPLOYMENT.md.

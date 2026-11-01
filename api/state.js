@@ -8,14 +8,15 @@ function createHandler(fetcher=fetch){
   const authorization=req.headers.authorization;
   if(!/^Bearer [A-Za-z0-9._-]+$/.test(authorization||''))return send(401,{error:'Sign in to access your vault.'});
   async function call(route,options={}){
-   const response=await fetcher(config.url+route,{...options,headers:{apikey:config.key,Authorization:authorization,'Content-Type':'application/json'},signal:AbortSignal.timeout(12000)});
+   const response=await fetcher(config.url+route,{...options,headers:{apikey:config.key,Authorization:authorization,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(12000)});
    const data=await response.json();
    if(!response.ok){const e=Error(data.code==='40001'?'Another device saved newer records. Reload saved data before retrying.':data.message||data.msg||'Supabase request failed.');e.status=response.status===401?401:data.code==='40001'?409:response.status===403?403:502;throw e;}
    return data;
   }
   const user=await call('/auth/v1/user');
+  if(user.is_anonymous)return send(403,{error:'Please create an email account to save your vault.'});
   const owners=await call('/rest/v1/vault_owners?select=user_id&user_id=eq.'+encodeURIComponent(user.id));
-  if(!owners.length)return send(403,{error:'This account has not been enabled as the vault owner. Add its user ID in Supabase before continuing.'});
+  if(!owners.length)await call('/rest/v1/vault_owners?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify({user_id:user.id})});
   if(req.method==='GET'){
    const rows=await call('/rest/v1/vault_workspaces?select=payload,revision,updated_at&user_id=eq.'+encodeURIComponent(user.id));
    const row=rows[0];return send(200,{state:row?F.validate(row.payload):null,revision:row?.revision||0,updatedAt:row?.updated_at||null,storage:'Supabase cloud database',allowBrowserImport:false});

@@ -7,3 +7,4 @@
 #auth-error { color: var(--negative); margin: 0; }
 #sign-out[hidden] { display: none; }
 @media(max-width: 480px) { #sign-out { padding: 8px; font-size: 12px; } }
+#auth-dialog [hidden]{display:none!important}.auth-links{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}#auth-notice:empty,#auth-error:empty{display:none}#auth-notice{margin:0;font-size:13px}

@@ -12,7 +12,7 @@
     const fromBrowser=()=>{const current=storage.getItem(key);if(current)return F.migrate(JSON.parse(current));const legacy=storage.getItem('folio-data-v1');if(legacy){const parsed=F.migrate(JSON.parse(legacy));if(!parsed.demo)return parsed;}return F.emptyState();};
     async function load(){
       demo=false;
-      if(remote){const saved=await request('GET');revision=saved.revision;if(saved.state){ready=true;return F.validate(saved.state);}const initial=saved.allowBrowserImport===false?F.emptyState():fromBrowser();const created=await request('PUT',{state:initial,revision});revision=created.revision;ready=true;return created.state;}
+      if(remote){const saved=await request('GET');revision=saved.revision;if(saved.state){ready=true;return F.validate(saved.state);}const initial=saved.allowBrowserImport===false?F.emptyState({name:'My vault'}):fromBrowser();const created=await request('PUT',{state:initial,revision});revision=created.revision;ready=true;return created.state;}
       const initial=fromBrowser();storage.setItem(key,JSON.stringify(initial));lastLocal=storage.getItem(key);ready=true;return initial;
     }
     async function save(state){
